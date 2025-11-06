@@ -6,72 +6,139 @@
 <title>Habi</title>
 <link rel="manifest" href="manifest.json">
 <style>
-body{background:#000;color:#fff;font-family:sans-serif;margin:0;padding:20px;max-width:600px;margin:auto}
-h1{text-align:center;color:#00aaff}
-button{background:#00aaff;border:none;color:#fff;padding:10px;margin:5px;width:100%;border-radius:10px;font-size:16px}
-button.completado{background:#333;text-decoration:line-through;color:#888}
-canvas{width:100%;height:200px;margin-top:20px}
+body {
+  background-color: #0b0b0b;
+  color: white;
+  font-family: Arial, sans-serif;
+  text-align: center;
+  margin: 0;
+  padding: 0;
+}
+h1 { color: #00aaff; margin-top: 20px; }
+#chart-container { width: 90%; max-width: 600px; margin: 20px auto; }
+canvas { background-color: #111; border-radius: 10px; }
+.habit { margin: 10px 0; }
+button {
+  background-color: #00aaff;
+  border: none;
+  color: white;
+  padding: 10px 20px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+button.completed { background-color: #004466; }
+#selector {
+  margin: 20px auto;
+  background-color: #111;
+  border: 1px solid #00aaff;
+  border-radius: 10px;
+  padding: 10px;
+  width: fit-content;
+}
+#selector select {
+  background: #0b0b0b;
+  color: #00aaff;
+  border: none;
+  font-size: 16px;
+}
 </style>
 </head>
 <body>
-<h1>Habi</h1>
-<div id="habitos"></div>
-<canvas id="grafica"></canvas>
+<h1>∞ Habi</h1>
+
+<div id="habits"></div>
+
+<div id="selector">
+  <label for="range">Ver progreso:</label>
+  <select id="range">
+    <option value="week">Semana</option>
+    <option value="month">Mes</option>
+    <option value="6months">6 meses</option>
+    <option value="year">Año</option>
+    <option value="all">Todo</option>
+  </select>
+</div>
+
+<div id="chart-container">
+  <canvas id="progressChart"></canvas>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-const habitos = [
-"Beber 2.5 L de agua",
-"Dormir 8 horas",
-"Hacer 30 min de ejercicio",
-"Comer frutas o verduras",
-"Evitar azúcar refinada",
-"Meditar o relajarse 10 min",
-"Hacer tarea",
-"No usar el celular al despertar",
-"Leer al menos 10 páginas",
-"Agradecer tres cosas del día"
+const habits = [
+  "Beber 2.5L de agua", "Dormir 8 horas", "Hacer 30 minutos de ejercicio",
+  "Meditar 10 minutos", "Leer 20 páginas", "Evitar comida chatarra",
+  "Hacer tarea", "Pasar tiempo con familia", "Practicar gratitud",
+  "Evitar redes sociales por 1h"
 ];
+const today = new Date().toISOString().split('T')[0];
+let data = JSON.parse(localStorage.getItem('habiData')) || {};
+if (!data[today]) data[today] = { completed: [] };
+updateHabits();
 
-const hoy = new Date().toDateString();
-if(localStorage.getItem("fecha")!==hoy){localStorage.clear();localStorage.setItem("fecha",hoy);}
-
-const cont = document.getElementById("habitos");
-habitos.forEach((h,i)=>{
-  const b=document.createElement("button");
-  b.textContent=h;
-  if(localStorage.getItem("h"+i)==="1")b.classList.add("completado");
-  b.onclick=()=>{
-    const c=b.classList.toggle("completado");
-    localStorage.setItem("h"+i,c?"1":"0");
-    actualizarGrafica();
-  };
-  cont.appendChild(b);
-});
-
-function obtenerPuntajeDia(){
-  let completados=0;
-  habitos.forEach((_,i)=>{if(localStorage.getItem("h"+i)==="1")completados++;});
-  return completados/habitos.length;
+function updateHabits() {
+  const container = document.getElementById('habits');
+  container.innerHTML = '';
+  habits.forEach((h, i) => {
+    const btn = document.createElement('button');
+    btn.textContent = h;
+    btn.className = 'habit' + (data[today].completed.includes(i) ? ' completed' : '');
+    btn.onclick = () => toggleHabit(i, btn);
+    container.appendChild(btn);
+  });
 }
 
-function actualizarGrafica(){
-  const ctx=document.getElementById("grafica").getContext("2d");
-  const datos=JSON.parse(localStorage.getItem("semana")||"[]");
-  const hoyIndice=new Date().getDay();
-  datos[hoyIndice]=obtenerPuntajeDia();
-  localStorage.setItem("semana",JSON.stringify(datos));
-  ctx.clearRect(0,0,ctx.canvas.width,ctx.canvas.height);
-  const w=ctx.canvas.width,h=ctx.canvas.height;
-  ctx.beginPath();
-  ctx.moveTo(0,h);
-  datos.forEach((v,i)=>ctx.lineTo((i/(datos.length-1||1))*w,h-v*h));
-  ctx.lineTo(w,h);ctx.closePath();
-  const grad=ctx.createLinearGradient(0,0,0,h);
-  grad.addColorStop(0,"#00aaffaa");
-  grad.addColorStop(1,"#000");
-  ctx.fillStyle=grad;ctx.fill();
-  ctx.strokeStyle="#00aaff";ctx.lineWidth=2;ctx.stroke();
+function toggleHabit(i, btn) {
+  const completed = data[today].completed;
+  if (completed.includes(i)) {
+    data[today].completed = completed.filter(x => x !== i);
+  } else {
+    completed.push(i);
+  }
+  localStorage.setItem('habiData', JSON.stringify(data));
+  btn.classList.toggle('completed');
+  renderChart();
 }
-actualizarGrafica();
+
+function renderChart() {
+  const range = document.getElementById('range').value;
+  const entries = Object.entries(data).sort(([a], [b]) => new Date(a) - new Date(b));
+  const now = new Date();
+  const filtered = entries.filter(([d]) => {
+    const date = new Date(d);
+    if (range === 'week') return (now - date) / (1000*60*60*24) <= 7;
+    if (range === 'month') return (now - date) / (1000*60*60*24) <= 30;
+    if (range === '6months') return (now - date) / (1000*60*60*24) <= 183;
+    if (range === 'year') return (now - date) / (1000*60*60*24) <= 365;
+    return true;
+  });
+
+  const labels = filtered.map(([d]) => d);
+  const values = filtered.map(([_, val]) => val.completed.length / habits.length * 100);
+
+  const ctx = document.getElementById('progressChart').getContext('2d');
+  if (window.chart) window.chart.destroy();
+  window.chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Progreso (%)',
+        data: values,
+        fill: true,
+        borderColor: '#00aaff',
+        backgroundColor: 'rgba(0,170,255,0.2)',
+        tension: 0.3
+      }]
+    },
+    options: {
+      scales: { y: { beginAtZero: true, max: 100 } },
+      plugins: { legend: { display: false } }
+    }
+  });
+}
+document.getElementById('range').addEventListener('change', renderChart);
+renderChart();
 </script>
 </body>
 </html>
